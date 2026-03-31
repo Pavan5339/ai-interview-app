@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { getJobByLinkAction } from "@/app/actions/interviews"
+import { getJobByLinkAction, getInterviewByIdAction } from "@/app/actions/interviews"
 import ActiveInterviewRoom from "./active-room"
 
 export default async function InterviewStartPage(props: { params: Promise<{ link: string }>; searchParams: Promise<{ interviewId?: string }> }) {
@@ -10,13 +10,18 @@ export default async function InterviewStartPage(props: { params: Promise<{ link
     return notFound()
   }
 
-  const { job, error } = await getJobByLinkAction(link)
+  const [{ job, error }, { interview }] = await Promise.all([
+    getJobByLinkAction(link),
+    getInterviewByIdAction(interviewId)
+  ])
 
   if (error || !job) {
     return notFound()
   }
 
+  const customQuestions = (interview as any)?.custom_questions ?? null
+
   return (
-    <ActiveInterviewRoom job={job} interviewId={interviewId} />
+    <ActiveInterviewRoom job={job} interviewId={interviewId} customQuestions={customQuestions} />
   )
 }

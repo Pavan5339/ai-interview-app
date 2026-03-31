@@ -19,6 +19,9 @@ interface SidebarProps {
 
 const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { name: "Interviews", icon: ListVideo, href: "/dashboard/interviews" },
+  { name: "Jobs", icon: Calendar, href: "/dashboard/jobs" },
+  { name: "Settings", icon: Settings, href: "/dashboard/settings" },
 ]
 
 export function Sidebar({ activeItem = "Dashboard", className }: SidebarProps) {

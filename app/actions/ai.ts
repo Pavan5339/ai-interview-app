@@ -1,8 +1,12 @@
 "use server"
 
-import { generateObject } from "ai"
-import { google } from "@ai-sdk/google"
+import { generateText } from "ai"
+import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
+
+const groq = createGroq({
+  apiKey: process.env.GROQ_API_KEY || "placeholder" // Prevents immediate crashing if loaded before env
+})
 
 export type ChatMessage = { role: "user" | "assistant" | "system", content: string }
 export type JobContext = { title: string, description: string, duration?: number, types?: string[] }
@@ -26,15 +30,14 @@ Instructions:
   `
 
   try {
-    const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
-      schema: z.object({
-        question: z.string().describe("Your spoken response to the candidate, either introducing yourself, assessing them, or asking the next question."),
-        isFinished: z.boolean().describe("True if you have asked enough questions and are concluding the interview. False otherwise."),
-      }),
-      system: systemPrompt,
+    const { text } = await generateText({
+      model: groq("llama-3.3-70b-versatile"),
+      system: systemPrompt + "\n\nCRITICAL: Respond ONLY in valid JSON format. Do NOT wrap in markdown blocks like ```json. The JSON must have exactly two properties: `question` (string) and `isFinished` (boolean).",
       messages: isInitial ? [{ role: "user", content: "Hello, I am ready to start the interview." }] : chatHistory,
     })
+
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const object = JSON.parse(cleanText);
 
     return { success: true, response: object }
   } catch (error) {
@@ -50,19 +53,14 @@ Analyze the candidate's responses carefully and provide a structured JSON evalua
   `
 
   try {
-    const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
-      schema: z.object({
-        technicalScore: z.number().min(1).max(10),
-        communicationScore: z.number().min(1).max(10),
-        strengths: z.array(z.string()).describe("List of key strengths demonstrated"),
-        weaknesses: z.array(z.string()).describe("List of areas for improvement"),
-        summary: z.string().describe("A highly detailed, comprehensive 3-4 paragraph summary of their entire performance, technical depth, communication style, and overall fit for the role. This must be an extensive and in-depth review."),
-        finalVerdict: z.enum(["Strong Hire", "Hire", "No Hire"])
-      }),
-      system: systemPrompt,
+    const { text } = await generateText({
+      model: groq("llama-3.3-70b-versatile"),
+      system: systemPrompt + "\n\nCRITICAL: Respond ONLY in valid JSON format without markdown blocks. The JSON must match this structure exactly: { \"technicalScore\": number, \"communicationScore\": number, \"strengths\": string[], \"weaknesses\": string[], \"summary\": string, \"finalVerdict\": string }",
       messages: chatHistory,
     })
+
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const object = JSON.parse(cleanText);
 
     return { success: true, evaluation: object }
   } catch (error: any) {
@@ -83,19 +81,16 @@ Each question should be practical and test the candidate's actual competency in 
   `
 
   try {
-    const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
-      schema: z.object({
-        questions: z.array(z.object({
-          question: z.string().describe("The interview question text"),
-          type: z.string().describe("The category or focus area of the question (e.g., Technical, Behavioral, Problem Solving)")
-        })).length(5)
-      }),
-      system: systemPrompt,
-      prompt: "Generate 5 specific questions based heavily on the job description.",
+    const { text } = await generateText({
+      model: groq("llama-3.3-70b-versatile"),
+      system: systemPrompt + "\n\nCRITICAL: Respond ONLY with a valid JSON object containing a `questions` array of exactly 5 objects. Do NOT wrap in markdown blocks like ```json. Example format: { \"questions\": [ { \"question\": \"...\", \"type\": \"...\" } ] }",
+      prompt: "Generate 5 specific questions based heavily on the job description. ONLY OUTPUT JSON.",
     })
 
-    return { success: true, questions: object.questions }
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanText);
+
+    return { success: true, questions: parsed.questions || parsed }
   } catch (error: any) {
     console.error("Gemini Preview Generation Error:", error)
     // Fallback UI to prevent blocking the recruiter if Gemini is down
@@ -107,5 +102,38 @@ Each question should be practical and test the candidate's actual competency in 
         { question: "How do you ensure quality and handle difficult technical blockers?", type: "Problem Solving" }
       ]
     }
+  }
+}
+
+export async function analyzeResumeAction(resumeText: string, jobContext: JobContext) {
+  const systemPrompt = `
+You are an expert technical recruiter and resume evaluator.
+Job Title: ${jobContext.title}
+Job Description: ${jobContext.description}
+Focus Areas: ${(jobContext.types || []).join(", ")}.
+
+You will be given a candidate's resume text. Your job is to:
+1. Score how well the resume fits this specific role (1-10).
+2. Write a short 2-sentence summary of the candidate's background.
+3. Generate exactly 5 questions:
+  - 2-3 questions probing specific claims, projects, or experiences mentioned in their resume.
+  - 2-3 questions assessing their fundamental fit for the specific requirements and skills described in the job description.
+  - The total must be exactly 5 questions.
+  `
+
+  try {
+    const { text } = await generateText({
+      model: groq("llama-3.3-70b-versatile"),
+      system: systemPrompt + "\n\nCRITICAL: Respond ONLY in valid JSON format without markdown blocks. Format exactly as: { \"resumeScore\": number, \"resumeSummary\": string, \"customQuestions\": [ { \"question\": string, \"type\": string } ] }",
+      prompt: `Here is the candidate's resume:\n\n${resumeText.slice(0, 8000)}`, // trim to avoid token limits
+    })
+
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const object = JSON.parse(cleanText);
+
+    return { success: true, ...object }
+  } catch (error: any) {
+    console.error("Resume Analysis Error:", error)
+    return { success: false, error: error.message || "Failed to analyze resume" }
   }
 }

@@ -10,7 +10,7 @@ import { completeInterviewAction } from "@/app/actions/interviews"
 import Vapi from "@vapi-ai/web"
 import { useRouter } from "next/navigation"
 
-export default function ActiveInterviewRoom({ job, interviewId }: { job: any, interviewId: string }) {
+export default function ActiveInterviewRoom({ job, interviewId, customQuestions }: { job: any, interviewId: string, customQuestions?: { question: string, type: string }[] | null }) {
   const router = useRouter()
   const [hasStartedSession, setHasStartedSession] = useState(false)
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
@@ -139,9 +139,14 @@ export default function ActiveInterviewRoom({ job, interviewId }: { job: any, in
       await vapiRef.current.start({
         name: "AIcruiter Interview",
         firstMessage: `Hi there! I'm AIcruiter. Thank you for taking the time to interview for the ${job.title} position today. How are you doing?`,
+        transcriber: {
+          provider: "deepgram",
+          model: "nova-2",
+          language: "en-US",
+        },
         model: {
-          provider: "openai",
-          model: "gpt-3.5-turbo",
+          provider: "groq",
+          model: "llama-3.3-70b-versatile",
           messages: [
             {
               role: "system",
@@ -151,20 +156,30 @@ Job Description: ${job.description}
 Interview Focus Areas: ${(job.types || []).join(", ")}.
 Duration: ${job.duration || 15} minutes.
 
+${customQuestions && customQuestions.length > 0 ? `
+IMPORTANT: This candidate's background has been reviewed. Use EXACTLY these 5 questions in order — they are a mix of resume-specific checks and role-specific evaluations:
+${customQuestions.map((q, i) => `Q${i + 1} [${q.type}]: ${q.question}`).join("\n")}
+
+Do NOT invent new questions. Ask these in order, one at a time.
+` : `
+Generate all of your technical and behavioral questions strictly based on the "Job Description" and "Interview Focus Areas" provided above.
+`}
+
 Instructions:
 1. You have already introduced yourself and asked how the candidate is doing. Listen to their response, acknowledge it briefly, and then proceed directly to evaluating them based on the role.
-2. Generate all of your technical and behavioral questions strictly based on the "Job Description" and "Interview Focus Areas" provided above. You must evaluate if the candidate has the skills required in the Job Description. DO NOT ask generic React questions unless the role is explicitly React.
-3. Conduct a professional, natural voice interview.
-4. Keep your questions and responses extremely brief and conversational. Never output long paragraphs or formatting.
-5. Ask one question at a time. Listen to the candidate's answer, briefly acknowledge it, and then ask the next question from the Job Description requirements.
-6. When you have asked enough questions evaluating the focus areas (approx 3-5 questions total), or if the candidate explicitly wants to end, conclude the interview gracefully.
-7. CRITICAL: When you are finished with the interview, you MUST say EXACTLY: "This concludes our interview. You did great, and we will be in touch soon. Goodbye!"`
+2. Conduct a professional, natural voice interview.
+3. Keep your questions and responses extremely brief and conversational. Never output long paragraphs or formatting.
+4. Ask one question at a time. Listen to the candidate's answer, briefly acknowledge it, and then ask the next question.
+5. When you have asked all questions (approx 3-5 total), or if the candidate explicitly wants to end, conclude the interview gracefully.
+6. CRITICAL: When you are finished with the interview, you MUST say EXACTLY: "This concludes our interview. You did great, and we will be in touch soon. Goodbye!"`
             }
           ]
         },
         voice: {
           provider: "11labs",
-          voiceId: "burt" // Default 11labs voice id available in Vapi
+          voiceId: "burt",
+          stability: 0.5,
+          similarityBoost: 0.75,
         }
       })
 

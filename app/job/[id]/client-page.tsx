@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowLeft, CheckCircle2, Clock, Code, Copy, Mail, MessageSquare, Plus } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Clock, Code, Copy, ExternalLink, Mail, MessageSquare, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -53,6 +53,12 @@ export default function JobShareView({ job }: { job: any }) {
               <Copy className="size-4" />
               Copy Link
             </Button>
+            <Link href={generatedLink} target="_blank">
+              <Button variant="outline" className="shrink-0 gap-2">
+                <ExternalLink className="size-4" />
+                Preview
+              </Button>
+            </Link>
           </div>
 
           <div className="flex items-center gap-6 text-sm text-muted-foreground pt-2 border-t">

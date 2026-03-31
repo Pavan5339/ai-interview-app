@@ -2,9 +2,10 @@
 
 import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, CheckCircle2, Clock, Code, Copy, Loader2, Mail, MessageSquare, Plus } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Clock, Code, Copy, FileText, Loader2, Mail, MessageSquare, Plus, Scan, Trash2, Upload, User, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -17,8 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { generatePreviewQuestionsAction } from "@/app/actions/ai"
+import { generateComprehensivePreviewAction } from "@/app/actions/previews"
 import { createJobAction } from "@/app/actions/jobs"
+import { sendInterviewInvitesAction } from "@/app/actions/emails"
 import { toast } from "sonner"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 const interviewTypes = [
   { id: "technical", label: "Technical" },
@@ -38,6 +42,30 @@ export function CreateInterviewForm() {
   const [jobData, setJobData] = useState<FormData | null>(null)
   const [generatedLink, setGeneratedLink] = useState("")
   const [previewQuestions, setPreviewQuestions] = useState<{question: string, type: string}[]>([])
+  const [candidatePreviews, setCandidatePreviews] = useState<any[]>([])
+  const [generatedCandidates, setGeneratedCandidates] = useState<any[]>([])
+  const [isSendingEmails, setIsSendingEmails] = useState(false)
+  type CandidateEntry = { id: string, name: string, email: string, resumeFile: File | null }
+  const [candidates, setCandidates] = useState<CandidateEntry[]>([])
+  
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [tempCandidate, setTempCandidate] = useState<CandidateEntry>({ id: "", name: "", email: "", resumeFile: null })
+
+  const openAddModal = () => {
+    setTempCandidate({ id: Date.now().toString() + Math.random(), name: "", email: "", resumeFile: null })
+    setIsModalOpen(true)
+  }
+
+  const saveCandidate = () => {
+    if (!tempCandidate.name.trim() || !tempCandidate.email.trim()) {
+      toast.error("Name and Email are required.")
+      return
+    }
+    setCandidates([...candidates, tempCandidate])
+    setIsModalOpen(false)
+  }
+
+  const removeCandidate = (id: string) => setCandidates(candidates.filter(c => c.id !== id));
 
   const toggleType = (id: string) => {
     setSelectedTypes(prev => 
@@ -48,6 +76,17 @@ export function CreateInterviewForm() {
   // Handle Initial Form Submit
   function handleGenerate(formData: FormData) {
     formData.append("types", JSON.stringify(selectedTypes))
+    
+    // Append multiple candidates
+    formData.append("candidatesCount", candidates.length.toString())
+    candidates.forEach((c, index) => {
+        formData.append(`candidateName_${index}`, c.name)
+        formData.append(`candidateEmail_${index}`, c.email)
+        if (c.resumeFile) {
+            formData.append(`resume_${index}`, c.resumeFile)
+        }
+    })
+
     setJobData(formData)
     setStep("generating")
     
@@ -55,11 +94,47 @@ export function CreateInterviewForm() {
       const title = formData.get("title")?.toString() || ""
       const description = formData.get("description")?.toString() || ""
       
-      const res = await generatePreviewQuestionsAction({ title, description, types: selectedTypes })
-      if (res.success && res.questions) {
-        setPreviewQuestions(res.questions)
+      console.log(`[DEBUG] Starting preview generation for ${candidates.length} candidates.`);
+
+      // Convert resumes to base64 for the server action
+      const candidatesWithResumes = await Promise.all(candidates.map(async (c) => {
+        let resumeBase64 = undefined
+        if (c.resumeFile) {
+          console.log(`[DEBUG] Encoding resume for ${c.name}: ${c.resumeFile.name} (${c.resumeFile.size} bytes)`);
+          const reader = new FileReader()
+          resumeBase64 = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const result = reader.result as string
+              const b64 = result.split(',')[1]
+              console.log(`[DEBUG] Successfully encoded ${c.name}'s resume. B64 Length: ${b64.length}`);
+              resolve(b64)
+            }
+            reader.onerror = () => reject(new Error("FileReader failed"))
+            reader.readAsDataURL(c.resumeFile!)
+          })
+        } else {
+          console.log(`[DEBUG] No resume file found for candidate: ${c.name}`);
+        }
+        return {
+          name: c.name,
+          email: c.email,
+          resumeBase64,
+          resumeName: c.resumeFile?.name
+        }
+      }))
+
+      const res = await generateComprehensivePreviewAction(
+        { title, description, types: selectedTypes },
+        candidatesWithResumes
+      )
+
+      if (res.success) {
+        console.log(`[DEBUG] Received preview response. Candidates analyzed: ${res.candidatePreviews?.filter((p:any) => p.hasAnalysis).length}`);
+        setPreviewQuestions(res.coreQuestions || [])
+        setCandidatePreviews(res.candidatePreviews || [])
       } else {
-        toast.error("Failed to generate preview questions.")
+        console.error(`[DEBUG] Preview generation failed:`, res.error);
+        toast.error(res.error || "Failed to generate comprehensive preview.")
         setPreviewQuestions([
           { question: `Tell me about your experience as a ${title}.`, type: "Background" },
           { question: "How do you handle complex technical problems?", type: "General" }
@@ -72,16 +147,46 @@ export function CreateInterviewForm() {
   // Handle Final Submission
   async function handleFinish() {
     if (!jobData) return
+    
+    // Add candidate previews to the form data to avoid re-analysis
+    const finalFormData = new FormData()
+    // Copy existing jobData
+    for (const [key, value] of (jobData as any).entries()) {
+      finalFormData.append(key, value)
+    }
+    // Append the pre-generated AI results
+    finalFormData.append("candidatePreviews", JSON.stringify(candidatePreviews))
+
     startTransition(async () => {
-      const result = await createJobAction(jobData)
+      const result = await createJobAction(finalFormData)
       if (result.error) {
         toast.error(result.error)
       } else {
         toast.success("Interview created successfully!")
         setGeneratedLink(`${window.location.origin}/interview/${result.link}`)
+        if (result.candidates) {
+          setGeneratedCandidates(result.candidates)
+        }
         setStep("success")
       }
     })
+  }
+
+  const handleSendEmails = async () => {
+    setIsSendingEmails(true)
+    try {
+      const title = jobData?.get("title")?.toString() || "AI Interview"
+      const res = await sendInterviewInvitesAction(generatedCandidates, title, generatedLink)
+      if (res.error) {
+        toast.error(res.error)
+      } else {
+        toast.success(`Successfully sent invites to ${res.count} candidates!`)
+      }
+    } catch (e) {
+      toast.error("Failed to send automated emails.")
+    } finally {
+      setIsSendingEmails(false)
+    }
   }
 
   const handleCopyLink = () => {
@@ -182,6 +287,80 @@ export function CreateInterviewForm() {
             </div>
           </div>
 
+          {/* Candidates Section */}
+          <div className="space-y-6 pt-8 border-t">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <UserPlus className="size-5 text-blue-500" />
+                <span>Initial Candidates (Optional)</span>
+              </div>
+            </div>
+
+            {candidates.length === 0 ? (
+              <div 
+                onClick={openAddModal}
+                className="group cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-10 hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-300"
+              >
+                <div className="size-14 rounded-full bg-blue-50 flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                  <UserPlus className="size-7 text-blue-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800">Add First Candidate</h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
+                  Add details now to get an AI Fit Score and personalized questions immediately after creation.
+                </p>
+                <Button type="button" variant="outline" className="mt-6 gap-2 border-blue-200 text-blue-600 hover:bg-blue-50">
+                  <Plus className="size-4" />
+                  Add Candidate Details
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {candidates.map((candidate) => (
+                    <div key={candidate.id} className="flex items-center justify-between p-4 bg-slate-50 border rounded-xl hover:shadow-sm transition-shadow">
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                          <User className="size-5 text-blue-600" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="font-semibold text-slate-800 truncate">{candidate.name}</p>
+                          <p className="text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                            <span className="truncate">{candidate.email}</span>
+                            {candidate.resumeFile && (
+                              <span className="flex items-center gap-1 truncate text-green-600">
+                                <span className="hidden sm:inline">•</span> 
+                                <FileText className="size-3" /> {candidate.resumeFile.name}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => removeCandidate(candidate.id)}
+                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 shrink-0 ml-2"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="w-full border-dashed border-2 py-8 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 text-slate-600 hover:text-slate-800"
+                  onClick={openAddModal}
+                >
+                  <Plus className="size-4 mr-2" />
+                  Add Another Candidate
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between pt-8">
             <Link href="/dashboard">
               <Button variant="outline" size="lg" type="button">
@@ -194,6 +373,90 @@ export function CreateInterviewForm() {
           </div>
         </form>
       )}
+
+      {/* Candidate Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Add Candidate</DialogTitle>
+            <DialogDescription>
+              Enter the candidate's details and optionally upload their resume for AI analysis.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-6 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="temp-name">Full Name</Label>
+              <Input 
+                id="temp-name"
+                value={tempCandidate.name}
+                onChange={(e) => setTempCandidate({...tempCandidate, name: e.target.value})}
+                placeholder="e.g. John Doe" 
+                className="bg-background" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="temp-email">Email Address</Label>
+              <Input 
+                id="temp-email"
+                type="email"
+                value={tempCandidate.email}
+                onChange={(e) => setTempCandidate({...tempCandidate, email: e.target.value})}
+                placeholder="e.g. john@example.com" 
+                className="bg-background" 
+              />
+            </div>
+            
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <Scan className="size-4 text-slate-400" />
+                <span>AI Resume Analysis (Optional)</span>
+              </Label>
+              <div 
+                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 transition-all ${
+                  tempCandidate.resumeFile ? "border-green-500 bg-green-50/50" : "border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 bg-background"
+                }`}
+              >
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  id="temp-resume"
+                  onChange={(e) => setTempCandidate({...tempCandidate, resumeFile: e.target.files?.[0] || null})}
+                />
+                <label 
+                  htmlFor="temp-resume" 
+                  className="flex flex-col items-center cursor-pointer text-center w-full"
+                >
+                  {tempCandidate.resumeFile ? (
+                    <>
+                      <div className="size-12 rounded-full bg-green-100 flex items-center justify-center mb-3">
+                        <FileText className="size-6 text-green-600" />
+                      </div>
+                      <span className="text-sm font-semibold text-slate-900">{tempCandidate.resumeFile.name}</span>
+                      <span className="text-xs text-green-600 mt-1 font-medium italic">Ready for Groq analysis</span>
+                      <Button type="button" variant="ghost" size="sm" className="mt-4 h-8 text-xs underline underline-offset-4" onClick={(e) => { e.preventDefault(); setTempCandidate({...tempCandidate, resumeFile: null}); }}>Remove file</Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="size-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                        <Upload className="size-6 text-slate-500" />
+                      </div>
+                      <span className="text-sm font-semibold text-slate-700">Click to upload candidate resume</span>
+                      <span className="text-xs text-slate-500 mt-1">Groq will auto-generate interview questions from this PDF</span>
+                    </>
+                  )}
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={saveCandidate} className="bg-blue-600 hover:bg-blue-700">Save Candidate</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {step === "generating" && (
         <Card className="flex flex-col items-center justify-center p-12 text-center shadow-sm animate-in fade-in duration-500">
@@ -210,19 +473,101 @@ export function CreateInterviewForm() {
           <h2 className="text-lg font-semibold text-foreground">Generated Interview Questions:</h2>
           
           <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 uppercase tracking-wider">
+              <MessageSquare className="size-4" />
+              <span>Core Job Questions (Shared)</span>
+            </div>
             {previewQuestions.map((q, idx) => (
-              <Card key={idx} className="p-5 overflow-hidden">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium leading-relaxed text-foreground">
-                    {q.question}
-                  </p>
-                  <p className="text-sm text-primary">
-                    Type: {q.type}
-                  </p>
+              <Card key={idx} className="p-4 bg-white border-slate-200">
+                <div className="flex gap-4">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                    {idx + 1}
+                  </span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-slate-800">{q.question}</p>
+                    <p className="text-xs text-slate-400">Category: {q.type}</p>
+                  </div>
                 </div>
               </Card>
             ))}
           </div>
+
+          {candidatePreviews.length > 0 && (
+            <div className="space-y-4 pt-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 uppercase tracking-wider">
+                <UserPlus className="size-4" />
+                <span>Candidate-Specific AI Analysis</span>
+              </div>
+              <Accordion type="single" collapsible className="w-full space-y-3">
+                {candidatePreviews.map((preview, idx) => (
+                  <AccordionItem 
+                    value={`cand-${idx}`} 
+                    key={idx} 
+                    className="border rounded-xl bg-white overflow-hidden px-4 shadow-sm"
+                  >
+                    <AccordionTrigger className="hover:no-underline py-4">
+                      <div className="flex items-center gap-4 text-left w-full">
+                        <div className="size-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                          <User className="size-5 text-slate-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 truncate">{preview.name}</div>
+                          <div className="text-xs text-slate-500 truncate">{preview.email}</div>
+                        </div>
+                        {preview.hasAnalysis ? (
+                          <div className="mr-4 flex items-center gap-2">
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded uppercase">
+                              Score: {preview.resumeScore}/10
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="mr-8 text-[10px] text-slate-400 font-medium italic truncate max-w-[120px]">
+                            {preview.error === "No resume provided" ? "No Resume Uploaded" : `Error: ${preview.error}`}
+                          </span>
+                        )}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-6 border-t pt-4">
+                      {preview.hasAnalysis ? (
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold text-slate-400 uppercase tracking-tighter">AI Resume Summary</Label>
+                            <p className="text-sm text-slate-600 leading-relaxed italic bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              "{preview.resumeSummary}"
+                            </p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Personalized Interview Questions (5)</Label>
+                            <div className="grid gap-2">
+                              {preview.customQuestions?.map((q: any, qIdx: number) => (
+                                <div key={qIdx} className="flex gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
+                                  <span className="text-xs font-bold text-blue-500">{qIdx + 1}.</span>
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-medium text-slate-700">{q.question}</p>
+                                    <p className="text-[10px] text-slate-400">Focus: {q.type}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                          <FileText className="size-8 text-slate-200 mb-2" />
+                          <p className="text-sm text-slate-400 px-6">
+                            {preview.error === "No resume provided" 
+                              ? "Standard job questions will be used for this candidate." 
+                              : `Analysis failed: ${preview.error}`}
+                          </p>
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          )}
 
           <div className="flex justify-end pt-6">
             <Button 
@@ -274,25 +619,75 @@ export function CreateInterviewForm() {
               </div>
               <div className="flex items-center gap-2">
                 <Code className="size-4" /> 
-                <span>5 Questions</span>
+                <span>5 Job Requirements Questions</span>
               </div>
             </div>
           </Card>
 
+          {generatedCandidates.length > 0 && (
+            <Card className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Candidates & Interview Questions</Label>
+                <div className="text-xs text-muted-foreground">{generatedCandidates.length} Candidates</div>
+              </div>
+              <Accordion type="single" collapsible className="w-full">
+                {generatedCandidates.map((candidate, idx) => (
+                  <AccordionItem value={`item-${idx}`} key={idx} className="border bg-slate-50/50 rounded-lg mb-2 px-4 shadow-sm">
+                    <AccordionTrigger className="hover:no-underline py-4">
+                      <div className="flex items-center gap-4 text-left w-full">
+                        <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                          <User className="size-4 text-blue-600" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="font-semibold text-sm text-slate-800 truncate">{candidate.candidate_name}</div>
+                          <div className="text-xs text-slate-500 truncate">{candidate.candidate_email}</div>
+                        </div>
+                        {candidate.resume_score && (
+                          <div className="mr-4 px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded shrink-0">
+                            Fit Score: {candidate.resume_score}/10
+                          </div>
+                        )}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4 border-t">
+                      {candidate.custom_questions && Array.isArray(candidate.custom_questions) ? (
+                        <div className="space-y-4 mt-2">
+                          <div className="text-sm font-medium text-slate-700 mb-2">Groq Generated Custom Questions:</div>
+                          {candidate.custom_questions.map((q: any, i: number) => (
+                            <div key={i} className="flex gap-3 text-sm bg-white p-3 rounded-md border shadow-sm">
+                              <span className="font-semibold text-blue-500">{i + 1}.</span>
+                              <div className="space-y-1">
+                                <p className="text-slate-700 leading-relaxed text-left">{q.question}</p>
+                                <p className="text-xs text-slate-400 font-medium text-left">Type: {q.type}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500 py-2">No custom AI questions were generated. Standard questions will be used.</p>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </Card>
+          )}
+
           <Card className="p-6 space-y-4">
             <Label className="text-base font-semibold">Share via</Label>
-            <div className="grid grid-cols-3 gap-4">
-              <Button variant="outline" className="w-full gap-2 h-12">
-                <Mail className="size-4" />
-                Email
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Button 
+                variant="outline" 
+                className={`w-full gap-2 h-12 text-blue-600 border-blue-200 hover:bg-blue-50 ${isSendingEmails ? 'opacity-50 pointer-events-none' : ''}`}
+                onClick={handleSendEmails}
+                disabled={isSendingEmails || generatedCandidates.length === 0}
+              >
+                {isSendingEmails ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                {isSendingEmails ? "Sending..." : "Send Email Invites to Candidates"}
               </Button>
-              <Button variant="outline" className="w-full gap-2 h-12">
-                <MessageSquare className="size-4" />
-                Slack
-              </Button>
-              <Button variant="outline" className="w-full gap-2 h-12">
-                <MessageSquare className="size-4" />
-                WhatsApp
+              <Button variant="outline" className="w-full gap-2 h-12" onClick={handleCopyLink}>
+                <Copy className="size-4" />
+                Copy generic link
               </Button>
             </div>
           </Card>

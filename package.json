@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.53",
+    "@ai-sdk/groq": "^3.0.31",
+    "@getbrevo/brevo": "^5.0.3",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.15",
@@ -40,6 +42,7 @@
     "@radix-ui/react-tooltip": "1.2.8",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.1",
+    "@types/pdf-parse": "^1.1.5",
     "@vapi-ai/web": "^2.5.2",
     "@vercel/analytics": "1.6.1",
     "ai": "^6.0.138",
@@ -53,6 +56,7 @@
     "lucide-react": "^0.564.0",
     "next": "16.2.0",
     "next-themes": "^0.4.6",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.4",
     "react-day-picker": "9.13.2",
     "react-dom": "19.2.4",
@@ -61,6 +65,7 @@
     "recharts": "2.15.0",
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.3.1",
+    "unpdf": "^1.4.0",
     "vaul": "^1.1.2",
     "zod": "^3.24.1"
   },

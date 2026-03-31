@@ -5,7 +5,7 @@ import { getInterviewByIdAction } from "@/app/actions/interviews"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { BrainCircuit, CheckCircle, MessageSquare, UserCircle2, XCircle, ArrowLeft } from "lucide-react"
+import { BrainCircuit, CheckCircle, MessageSquare, UserCircle2, XCircle, ArrowLeft, FileText, Star } from "lucide-react"
 
 export default async function CandidateEvaluationPage(props: { params: Promise<{ id: string, interviewId: string }> }) {
   const { id: jobId, interviewId } = await props.params
@@ -87,13 +87,34 @@ export default async function CandidateEvaluationPage(props: { params: Promise<{
                     }`}>{evalData.finalVerdict}</p>
                 </div>
             </div>
+            
+            {/* Split View for Resume vs Interview Context */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Resume Analysis */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <h4 className="font-bold text-lg text-slate-800 border-b pb-3 mb-4 flex items-center gap-2">
+                      <FileText className="size-5 text-blue-500" /> Resume Analysis
+                  </h4>
+                  {interview.resume_score !== null && (
+                    <div className="flex items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 w-max">
+                      <Star className={`size-5 ${interview.resume_score >= 8 ? 'text-green-500 fill-green-500' : interview.resume_score >= 5 ? 'text-yellow-500 fill-yellow-500' : 'text-red-500 fill-red-500'}`} />
+                      <span className="font-bold text-slate-700">Fit Score: {interview.resume_score}/10</span>
+                    </div>
+                  )}
+                  <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-line">
+                    {interview.resume_summary || "No resume was provided or analyzed for this candidate."}
+                  </p>
+              </div>
 
-            {/* Summary */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h4 className="font-bold text-lg text-slate-800 border-b pb-3 mb-4 flex items-center gap-2">
-                    <BrainCircuit className="size-5 text-primary" /> Executive Summary
-                </h4>
-                <p className="text-slate-600 leading-relaxed text-base whitespace-pre-line">{evalData.summary}</p>
+              {/* Interview Summary */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <h4 className="font-bold text-lg text-slate-800 border-b pb-3 mb-4 flex items-center gap-2">
+                      <BrainCircuit className="size-5 text-purple-500" /> Voice Interview Analysis
+                  </h4>
+                  <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-line">
+                    {evalData.summary || "No verbal summary generated."}
+                  </p>
+              </div>
             </div>
 
             {/* Strengths & Weaknesses */}

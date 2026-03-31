@@ -1,6 +1,8 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { analyzeResumeAction } from "@/app/actions/ai"
+import { extractText } from "unpdf"
 
 export async function getJobByLinkAction(link: string) {
   const supabase = await createClient()
@@ -19,16 +21,35 @@ export async function getJobByLinkAction(link: string) {
   return { job: data }
 }
 
+
 export async function createInterviewAction(formData: FormData) {
   const candidateName = formData.get("candidateName") as string
   const candidateEmail = formData.get("candidateEmail") as string
   const jobId = formData.get("jobId") as string
+  const jobTitle = formData.get("jobTitle") as string
+  const jobDescription = formData.get("jobDescription") as string
+  const resumeFile = formData.get("resume") as File | null
 
   if (!candidateName || !candidateEmail || !jobId) {
     return { error: "Missing required fields" }
   }
 
   const supabase = await createClient()
+
+  // 1. Check if an interview already exists for this candidate (pre-added by recruiter)
+  const { data: existingCandidate } = await supabase
+    .from("interviews")
+    .select("*")
+    .eq("job_id", jobId)
+    .eq("candidate_email", candidateEmail)
+    .single()
+
+  if (existingCandidate) {
+    return { success: true, interview: existingCandidate }
+  }
+
+  // 2. If they don't exist, create a new row (Public link fallback)
+  const resumeData = await handleResumeAnalysis(supabase, jobId, jobTitle, jobDescription, resumeFile)
 
   const { data, error } = await supabase
     .from("interviews")
@@ -37,7 +58,8 @@ export async function createInterviewAction(formData: FormData) {
         job_id: jobId,
         candidate_name: candidateName,
         candidate_email: candidateEmail,
-        status: "PENDING"
+        status: "PENDING",
+        ...resumeData
       }
     ])
     .select()
@@ -49,6 +71,111 @@ export async function createInterviewAction(formData: FormData) {
   }
 
   return { success: true, interview: data }
+}
+
+export async function handleResumeAnalysis(
+  supabase: any,
+  jobId: string,
+  jobTitle: string,
+  jobDescription: string,
+  resumeFile: File | null,
+  existingAnalysis?: { resumeScore: number; resumeSummary: string; customQuestions: any[]; resumeText: string }
+) {
+  let resumeText = ""
+  let resumeScore: number | null = null
+  let resumeSummary: string | null = null
+  let customQuestions: any[] | null = null
+  let resumeUrl: string | null = null
+
+  if (resumeFile && resumeFile.size > 0) {
+    try {
+      const arrayBuffer = await resumeFile.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      
+      // Use unpdf - a server-friendly PDF text extractor (no worker needed)
+      const { text: extractedText } = await extractText(new Uint8Array(buffer), { mergePages: true })
+      resumeText = extractedText as string
+
+      const fileName = `${jobId}/${Date.now()}_${resumeFile.name.replace(/\s/g, '_')}`
+      const { data: uploadData } = await supabase.storage
+        .from("resumes")
+        .upload(fileName, buffer, { contentType: "application/pdf", upsert: false })
+      
+      if (uploadData) {
+        const { data: urlData } = supabase.storage.from("resumes").getPublicUrl(uploadData.path)
+        resumeUrl = urlData?.publicUrl || null
+      }
+
+        if (existingAnalysis) {
+          resumeText = existingAnalysis.resumeText
+          resumeScore = existingAnalysis.resumeScore
+          resumeSummary = existingAnalysis.resumeSummary
+          customQuestions = existingAnalysis.customQuestions
+        } else if (resumeText.trim().length > 50) {
+          const analysis = await analyzeResumeAction(resumeText, {
+            title: jobTitle,
+            description: jobDescription,
+          })
+          if (analysis.success && 'resumeScore' in analysis) {
+            resumeScore = analysis.resumeScore ?? null
+            resumeSummary = analysis.resumeSummary ?? null
+            customQuestions = analysis.customQuestions ?? null
+          }
+        }
+    } catch (err) {
+      console.error("Resume analysis error:", err)
+    }
+  }
+
+  return {
+    resume_text: resumeText || null,
+    resume_score: resumeScore,
+    resume_summary: resumeSummary,
+    resume_url: resumeUrl,
+    custom_questions: customQuestions,
+  }
+}
+
+export async function addCandidateWithResumeAction(formData: FormData) {
+  const candidateName = formData.get("candidateName") as string
+  const candidateEmail = formData.get("candidateEmail") as string
+  const jobId = formData.get("jobId") as string
+  const jobTitle = formData.get("jobTitle") as string
+  const jobDescription = formData.get("jobDescription") as string
+  const resumeFile = formData.get("resume") as File | null
+
+  if (!candidateName || !candidateEmail || !jobId) {
+    return { error: "Missing required fields" }
+  }
+
+  const supabase = await createClient()
+
+  // Use the shared helper
+  const resumeData = await handleResumeAnalysis(supabase, jobId, jobTitle, jobDescription, resumeFile)
+
+  const { data, error } = await supabase
+    .from("interviews")
+    .insert([{
+      job_id: jobId,
+      candidate_name: candidateName,
+      candidate_email: candidateEmail,
+      status: "PENDING",
+      ...resumeData
+    }])
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error creating candidate:", error)
+    return { error: "Failed to add candidate" }
+  }
+
+  return {
+    success: true,
+    interview: data,
+    resumeScore: resumeData.resume_score,
+    resumeSummary: resumeData.resume_summary,
+  }
 }
 
 export async function completeInterviewAction(interviewId: string, evaluation: any) {
@@ -102,4 +229,26 @@ export async function getInterviewByIdAction(interviewId: string) {
   }
 
   return { interview: data }
+}
+
+export async function deleteCandidateAction(interviewId: string, jobId: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Unauthorized" }
+
+  const { error } = await supabase
+    .from("interviews")
+    .delete()
+    .eq("id", interviewId)
+
+  if (error) {
+    console.error("Error deleting candidate:", error)
+    return { error: "Failed to delete candidate" }
+  }
+
+  const { revalidatePath } = await import("next/cache")
+  revalidatePath(`/job/${jobId}`)
+
+  return { success: true }
 }

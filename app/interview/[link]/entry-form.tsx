@@ -28,13 +28,20 @@ export function CandidateEntryForm({
 
   async function onSubmit(formData: FormData) {
     formData.append("jobId", jobId)
+    formData.append("jobTitle", jobTitle)
+    formData.append("jobDescription", jobDescription)
+    
     startTransition(async () => {
-      const result = await createInterviewAction(formData)
-      if (result.error) {
-        toast.error(result.error)
-      } else {
-        toast.success("Interview session created!")
-        router.push(`/interview/${link}/start?interviewId=${result.interview.id}`)
+      try {
+        const result = await createInterviewAction(formData)
+        if (result.error) {
+          toast.error(result.error)
+        } else {
+          toast.success("Interview session created!")
+          router.push(`/interview/${link}/start?interviewId=${result.interview.id}`)
+        }
+      } catch (err) {
+        toast.error("An unexpected error occurred")
       }
     })
   }
@@ -59,9 +66,15 @@ export function CandidateEntryForm({
           <Input id="candidateEmail" name="candidateEmail" type="email" placeholder="Enter your email" required disabled={isPending} />
         </div>
 
-        <Button type="submit" className="w-full" disabled={isPending}>
-          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Start Video Interview
+        <Button type="submit" className="w-full h-12" disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Starting Interview...
+            </>
+          ) : (
+            "Start Video Interview"
+          )}
         </Button>
       </form>
     </Card>
