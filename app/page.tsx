@@ -67,7 +67,7 @@ export default function LandingPage() {
         <section id="features" className="w-full py-20 px-6 max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Everything you need to scale hiring</h2>
-            <p className="text-lg text-slate-600 max-w-xl mx-auto">Stop reading resumes. Let AI cruiter actually talk to your candidates and find the ones who truly know what they are doing.</p>
+            <p className="text-lg text-slate-600 max-w-xl mx-auto">Stop reading resumes. Let AIcruiter actually talk to your candidates and find the ones who truly know what they are doing.</p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
@@ -87,7 +87,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-3">Instant Evaluation</h3>
               <p className="text-slate-600 leading-relaxed">
-                As soon as the interview ends, Gemini 2.5 Flash analyzes the transcript to issue a 1-10 technical score and a highly detailed summary.
+                As soon as the interview ends, our LLM engines analyze the transcript to issue a 1-10 technical score and a highly detailed summary.
               </p>
             </div>
             
@@ -102,10 +102,107 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* How It Works Section */}
+        <section className="w-full py-24 bg-white border-t border-slate-100">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">How it works</h2>
+              <p className="text-lg text-slate-500 max-w-2xl mx-auto">Get your first technical screening running in under 5 minutes.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-12 relative">
+              {/* Connecting Line (Desktop) */}
+              <div className="hidden md:block absolute top-[44px] left-[15%] right-[15%] h-0.5 bg-slate-100 z-0" />
+
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-24 h-24 rounded-full bg-blue-50 border-8 border-white flex items-center justify-center text-blue-600 font-bold text-2xl shadow-sm mb-6">
+                  1
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Create a Job</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  Paste your job description and required skills. AIcruiter instantly generates a custom interview template.
+                </p>
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-24 h-24 rounded-full bg-indigo-50 border-8 border-white flex items-center justify-center text-indigo-600 font-bold text-2xl shadow-sm mb-6">
+                  2
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Invite Candidates</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  Upload candidate resumes to get a baseline fit score, then automatically email them their unique voice interview link.
+                </p>
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-24 h-24 rounded-full bg-emerald-50 border-8 border-white flex items-center justify-center text-emerald-600 font-bold text-2xl shadow-sm mb-6">
+                  3
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Review & Hire</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  Log into your dashboard to view the AI's final verdict, read the transcript, and decide who moves to the final round.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
 
-      <footer className="w-full py-8 border-t border-slate-200 bg-white text-center">
-        <p className="text-slate-500 font-medium">© 2026 AIcruiter Inc. All rights reserved.</p>
+      {/* Extended Footer */}
+      <footer className="w-full bg-slate-900 text-slate-300 py-16 border-t border-slate-800">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
+          {/* Brand */}
+          <div className="col-span-1 md:col-span-1">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="bg-primary p-2 rounded-xl text-white">
+                <Bot className="size-5" />
+              </div>
+              <span className="font-bold text-xl tracking-tight text-white">AIcruiter</span>
+            </div>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              The modern way to conduct technical phone screens. Fully automated, unbiased, and powered by voice AI.
+            </p>
+          </div>
+
+          {/* Links */}
+          <div>
+            <h4 className="font-semibold text-white mb-6">Product</h4>
+            <ul className="space-y-4 text-sm">
+              <li><Link href="#features" className="hover:text-blue-400 transition-colors">Features</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Pricing</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Security</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Integrations</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-white mb-6">Company</h4>
+            <ul className="space-y-4 text-sm">
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">About Us</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Careers</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Blog</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Contact</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-white mb-6">Legal</h4>
+            <ul className="space-y-4 text-sm">
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Terms of Service</Link></li>
+              <li><Link href="#" className="hover:text-blue-400 transition-colors">Cookie Policy</Link></li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between">
+          <p className="text-sm text-slate-500">© 2026 AIcruiter Inc. All rights reserved.</p>
+          <div className="flex gap-4 mt-4 md:mt-0 text-slate-500">
+             <span className="text-sm">Built with Next.js, Supabase & Vapi</span>
+          </div>
+        </div>
       </footer>
     </div>
   )
