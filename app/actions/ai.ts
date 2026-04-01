@@ -1,8 +1,7 @@
 "use server"
 
-import { generateText, generateObject } from "ai"
+import { generateText } from "ai"
 import { createGroq } from "@ai-sdk/groq"
-import { z } from "zod"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY || "placeholder" // Prevents immediate crashing if loaded before env
@@ -53,20 +52,20 @@ Analyze the candidate's responses carefully and provide a structured JSON evalua
   `
 
   try {
-    const { object } = await generateObject({
+    const { text } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      system: systemPrompt,
+      system: systemPrompt + "\n\nCRITICAL: Respond ONLY in valid JSON format without markdown blocks. The JSON must match this structure exactly: { \"technicalScore\": number, \"communicationScore\": number, \"strengths\": string[], \"weaknesses\": string[], \"summary\": string, \"finalVerdict\": string }",
       messages: chatHistory,
-      schema: z.object({
-        technicalScore: z.number().describe("Score from 1 to 10 evaluating technical proficiency"),
-        communicationScore: z.number().describe("Score from 1 to 10 evaluating communication skills"),
-        strengths: z.array(z.string()).describe("List of 2-3 key technical strengths demonstrated"),
-        weaknesses: z.array(z.string()).describe("List of 1-2 areas for improvement or lack of knowledge"),
-        summary: z.string().describe("A concise 3-sentence executive summary of their performance"),
-        finalVerdict: z.enum(["Strong Hire", "Hire", "No Hire"])
-      })
     })
 
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      throw new Error("Could not extract JSON from AI response.");
+    }
+
+    const object = JSON.parse(jsonMatch[0]);
     return { success: true, evaluation: object }
   } catch (error: any) {
     console.error("Gemini Evaluation Error:", error)
