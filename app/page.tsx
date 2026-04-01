@@ -111,37 +111,47 @@ export default function LandingPage() {
               <p className="text-lg text-slate-500 max-w-2xl mx-auto">Get your first technical screening running in under 5 minutes.</p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-12 relative">
+            <div className="grid md:grid-cols-4 gap-8 lg:gap-12 relative">
               {/* Connecting Line (Desktop) */}
-              <div className="hidden md:block absolute top-[44px] left-[15%] right-[15%] h-0.5 bg-slate-100 z-0" />
+              <div className="hidden md:block absolute top-[44px] left-[12%] right-[12%] h-1 bg-gradient-to-r from-blue-100 via-purple-100 to-emerald-100 z-0 rounded-full" />
 
-              <div className="relative z-10 flex flex-col items-center text-center">
-                <div className="w-24 h-24 rounded-full bg-blue-50 border-8 border-white flex items-center justify-center text-blue-600 font-bold text-2xl shadow-sm mb-6">
+              <div className="relative z-10 flex flex-col items-center text-center group">
+                <div className="w-24 h-24 rounded-full bg-blue-50 border-8 border-white flex items-center justify-center text-blue-600 font-bold text-2xl shadow-sm mb-6 group-hover:scale-110 group-hover:shadow-blue-200 group-hover:shadow-lg transition-all duration-300">
                   1
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Create a Job</h3>
-                <p className="text-slate-600 leading-relaxed">
-                  Paste your job description and required skills. AIcruiter instantly generates a custom interview template.
+                <p className="text-sm text-slate-600 leading-relaxed max-w-[250px]">
+                  Paste your job description. AIcruiter instantly generates a custom interview template.
                 </p>
               </div>
 
-              <div className="relative z-10 flex flex-col items-center text-center">
-                <div className="w-24 h-24 rounded-full bg-indigo-50 border-8 border-white flex items-center justify-center text-indigo-600 font-bold text-2xl shadow-sm mb-6">
+              <div className="relative z-10 flex flex-col items-center text-center group">
+                <div className="w-24 h-24 rounded-full bg-indigo-50 border-8 border-white flex items-center justify-center text-indigo-600 font-bold text-2xl shadow-sm mb-6 group-hover:scale-110 group-hover:shadow-indigo-200 group-hover:shadow-lg transition-all duration-300">
                   2
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Invite Candidates</h3>
-                <p className="text-slate-600 leading-relaxed">
-                  Upload candidate resumes to get a baseline fit score, then automatically email them their unique voice interview link.
+                <p className="text-sm text-slate-600 leading-relaxed max-w-[250px]">
+                  Upload resumes to get a baseline fit score, then automatically email unique interview links.
                 </p>
               </div>
 
-              <div className="relative z-10 flex flex-col items-center text-center">
-                <div className="w-24 h-24 rounded-full bg-emerald-50 border-8 border-white flex items-center justify-center text-emerald-600 font-bold text-2xl shadow-sm mb-6">
+              <div className="relative z-10 flex flex-col items-center text-center group">
+                <div className="w-24 h-24 rounded-full bg-purple-50 border-8 border-white flex items-center justify-center text-purple-600 font-bold text-2xl shadow-sm mb-6 group-hover:scale-110 group-hover:shadow-purple-200 group-hover:shadow-lg transition-all duration-300">
                   3
                 </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Voice Screening</h3>
+                <p className="text-sm text-slate-600 leading-relaxed max-w-[250px]">
+                  Candidates interact with our conversational AI via live WebRTC voice to prove their actual skills.
+                </p>
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center text-center group">
+                <div className="w-24 h-24 rounded-full bg-emerald-50 border-8 border-white flex items-center justify-center text-emerald-600 font-bold text-2xl shadow-sm mb-6 group-hover:scale-110 group-hover:shadow-emerald-200 group-hover:shadow-lg transition-all duration-300">
+                  4
+                </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Review & Hire</h3>
-                <p className="text-slate-600 leading-relaxed">
-                  Log into your dashboard to view the AI's final verdict, read the transcript, and decide who moves to the final round.
+                <p className="text-sm text-slate-600 leading-relaxed max-w-[250px]">
+                  View AI grading, transcript, and full performance analysis inside your dashboard.
                 </p>
               </div>
             </div>
