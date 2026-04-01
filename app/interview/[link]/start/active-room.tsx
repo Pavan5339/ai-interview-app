@@ -83,6 +83,13 @@ export default function ActiveInterviewRoom({ job, interviewId, customQuestions 
     }
     const onError = (e: any) => {
       console.error("Vapi Error:", e)
+      
+      // Ignore safe Daily.co termination / timeout events
+      const errorMsg = e?.error?.errorMsg || e?.error?.message?.msg || e?.error?.error?.msg || "";
+      if (typeof errorMsg === "string" && (errorMsg.includes("Meeting has ended") || errorMsg.includes("ejected"))) {
+        return; 
+      }
+      
       toast.error("Voice AI encountered an error. Check console.")
     }
 
