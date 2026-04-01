@@ -52,33 +52,42 @@ export default function ActiveInterviewRoom({ job, interviewId, customQuestions 
     const onSpeechStart = () => setAiSpeaking(true)
     const onSpeechEnd = () => setAiSpeaking(false)
     const onMessage = (message: any) => {
-      if (message.type === 'transcript' && message.transcriptType === 'final') {
-        if (message.role === 'user') {
-          setInterimTranscript(message.transcript)
-          setChatHistory(prev => {
-            const next = [...prev, { role: "user" as const, content: message.transcript }]
-            chatHistoryRef.current = next
-            return next
-          })
-        } else if (message.role === 'assistant') {
-          setCurrentAiText(message.transcript)
-          setChatHistory(prev => {
-            const next = [...prev, { role: "assistant" as const, content: message.transcript }]
-            chatHistoryRef.current = next
-            return next
-          })
-          
-          if (message.transcript?.toLowerCase().includes("concludes our interview")) {
-             // If AI says the exact terminating phrase, shut down Vapi safely 5 seconds later
-             setTimeout(() => {
-                if (vapiRef.current) {
-                   vapiRef.current.stop()
-                }
-             }, 5000)
+      if (message.type === 'transcript') {
+        
+        // Handle live streaming words
+        if (message.transcriptType === 'interim') {
+           if (message.role === 'user') {
+             setInterimTranscript(message.transcript)
+           } else if (message.role === 'assistant') {
+             setCurrentAiText(message.transcript)
+           }
+        } 
+        // Handle finalized sentences
+        else if (message.transcriptType === 'final') {
+          if (message.role === 'user') {
+            setInterimTranscript(message.transcript)
+            setChatHistory(prev => {
+              const next = [...prev, { role: "user" as const, content: message.transcript }]
+              chatHistoryRef.current = next
+              return next
+            })
+          } else if (message.role === 'assistant') {
+            setCurrentAiText(message.transcript)
+            setChatHistory(prev => {
+              const next = [...prev, { role: "assistant" as const, content: message.transcript }]
+              chatHistoryRef.current = next
+              return next
+            })
+            
+            if (message.transcript?.toLowerCase().includes("concludes our interview")) {
+               setTimeout(() => {
+                  if (vapiRef.current) {
+                     vapiRef.current.stop()
+                  }
+               }, 5000)
+            }
           }
         }
-      } else if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
-        setInterimTranscript(message.transcript)
       }
     }
     const onError = (e: any) => {
